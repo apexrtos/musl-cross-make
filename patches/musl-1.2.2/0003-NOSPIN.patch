@@ -1,0 +1,113 @@
+From 31e587755dbbdbbc6789688a07d2c9256de23b9c Mon Sep 17 00:00:00 2001
+From: Patrick Oppenlander <patrick.oppenlander@gmail.com>
+Date: Tue, 12 Jan 2021 08:41:17 +1100
+Subject: [PATCH 3/3] NOSPIN
+
+---
+ src/thread/__wait.c                     | 4 ++++
+ src/thread/pthread_barrier_wait.c       | 4 ++++
+ src/thread/pthread_mutex_timedlock.c    | 4 ++++
+ src/thread/pthread_rwlock_timedrdlock.c | 4 ++++
+ src/thread/pthread_rwlock_timedwrlock.c | 4 ++++
+ src/thread/sem_timedwait.c              | 4 ++++
+ 6 files changed, 24 insertions(+)
+
+diff --git a/src/thread/__wait.c b/src/thread/__wait.c
+index dc33c1a3..aabd4636 100644
+--- a/src/thread/__wait.c
++++ b/src/thread/__wait.c
+@@ -2,7 +2,11 @@
+ 
+ void __wait(volatile int *addr, volatile int *waiters, int val, int priv)
+ {
++#ifdef NOSPIN
++	int spins=1;
++#else
+ 	int spins=100;
++#endif
+ 	if (priv) priv = FUTEX_PRIVATE;
+ 	while (spins-- && (!waiters || !*waiters)) {
+ 		if (*addr==val) a_spin();
+diff --git a/src/thread/pthread_barrier_wait.c b/src/thread/pthread_barrier_wait.c
+index cc2a8bbf..c3da8f26 100644
+--- a/src/thread/pthread_barrier_wait.c
++++ b/src/thread/pthread_barrier_wait.c
+@@ -76,7 +76,11 @@ int pthread_barrier_wait(pthread_barrier_t *b)
+ 	/* First thread to enter the barrier becomes the "instance owner" */
+ 	if (!inst) {
+ 		struct instance new_inst = { 0 };
++#ifdef NOSPIN
++		int spins = 1;
++#else
+ 		int spins = 200;
++#endif
+ 		b->_b_inst = inst = &new_inst;
+ 		a_store(&b->_b_lock, 0);
+ 		if (b->_b_waiters) __wake(&b->_b_lock, 1, 1);
+diff --git a/src/thread/pthread_mutex_timedlock.c b/src/thread/pthread_mutex_timedlock.c
+index 9279fc54..5d126e86 100644
+--- a/src/thread/pthread_mutex_timedlock.c
++++ b/src/thread/pthread_mutex_timedlock.c
+@@ -67,7 +67,11 @@ int __pthread_mutex_timedlock(pthread_mutex_t *restrict m, const struct timespec
+ 
+ 	if (type&8) return pthread_mutex_timedlock_pi(m, at);
+ 	
++#ifdef NOSPIN
++	int spins = 1;
++#else
+ 	int spins = 100;
++#endif
+ 	while (spins-- && m->_m_lock && !m->_m_waiters) a_spin();
+ 
+ 	while ((r=__pthread_mutex_trylock(m)) == EBUSY) {
+diff --git a/src/thread/pthread_rwlock_timedrdlock.c b/src/thread/pthread_rwlock_timedrdlock.c
+index 8cdd8ecf..9c0be396 100644
+--- a/src/thread/pthread_rwlock_timedrdlock.c
++++ b/src/thread/pthread_rwlock_timedrdlock.c
+@@ -7,7 +7,11 @@ int __pthread_rwlock_timedrdlock(pthread_rwlock_t *restrict rw, const struct tim
+ 	r = pthread_rwlock_tryrdlock(rw);
+ 	if (r != EBUSY) return r;
+ 	
++#ifdef NOSPIN
++	int spins = 1;
++#else
+ 	int spins = 100;
++#endif
+ 	while (spins-- && rw->_rw_lock && !rw->_rw_waiters) a_spin();
+ 
+ 	while ((r=__pthread_rwlock_tryrdlock(rw))==EBUSY) {
+diff --git a/src/thread/pthread_rwlock_timedwrlock.c b/src/thread/pthread_rwlock_timedwrlock.c
+index d77706e6..1291b024 100644
+--- a/src/thread/pthread_rwlock_timedwrlock.c
++++ b/src/thread/pthread_rwlock_timedwrlock.c
+@@ -7,7 +7,11 @@ int __pthread_rwlock_timedwrlock(pthread_rwlock_t *restrict rw, const struct tim
+ 	r = pthread_rwlock_trywrlock(rw);
+ 	if (r != EBUSY) return r;
+ 	
++#ifdef NOSPIN
++	int spins = 1;
++#else
+ 	int spins = 100;
++#endif
+ 	while (spins-- && rw->_rw_lock && !rw->_rw_waiters) a_spin();
+ 
+ 	while ((r=__pthread_rwlock_trywrlock(rw))==EBUSY) {
+diff --git a/src/thread/sem_timedwait.c b/src/thread/sem_timedwait.c
+index 58d3ebfe..c6ab8c2e 100644
+--- a/src/thread/sem_timedwait.c
++++ b/src/thread/sem_timedwait.c
+@@ -12,7 +12,11 @@ int sem_timedwait(sem_t *restrict sem, const struct timespec *restrict at)
+ 
+ 	if (!sem_trywait(sem)) return 0;
+ 
++#ifdef NOSPIN
++	int spins = 1;
++#else
+ 	int spins = 100;
++#endif
+ 	while (spins-- && sem->__val[0] <= 0 && !sem->__val[1]) a_spin();
+ 
+ 	while (sem_trywait(sem)) {
+-- 
+2.30.0
+

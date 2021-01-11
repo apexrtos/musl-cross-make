@@ -1,0 +1,30 @@
+From 9cefceb27ce54c255e0ab41ecec0a6ccaa9773ef Mon Sep 17 00:00:00 2001
+From: Patrick Oppenlander <patrick.oppenlander@gmail.com>
+Date: Tue, 12 Jan 2021 08:40:15 +1100
+Subject: [PATCH 2/3] MINSTACK
+
+---
+ src/internal/pthread_impl.h | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/src/internal/pthread_impl.h b/src/internal/pthread_impl.h
+index 5742dfc5..63e67b33 100644
+--- a/src/internal/pthread_impl.h
++++ b/src/internal/pthread_impl.h
+@@ -179,8 +179,13 @@ extern hidden volatile int __thread_list_lock;
+ extern hidden unsigned __default_stacksize;
+ extern hidden unsigned __default_guardsize;
+ 
++#ifdef MINSTACK
++#define DEFAULT_STACK_SIZE 4096
++#define DEFAULT_GUARD_SIZE 4096
++#else
+ #define DEFAULT_STACK_SIZE 131072
+ #define DEFAULT_GUARD_SIZE 8192
++#endif
+ 
+ #define DEFAULT_STACK_MAX (8<<20)
+ #define DEFAULT_GUARD_MAX (1<<20)
+-- 
+2.30.0
+
