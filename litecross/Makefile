@@ -255,6 +255,8 @@ install-binutils: | obj_binutils/.lc_built
 install-gcc: | obj_gcc/.lc_built
 	cd obj_gcc && $(MAKE) MAKE="$(MAKE) $(LIBTOOL_ARG)" DESTDIR=$(DESTDIR)$(OUTPUT) install
 	ln -sf $(TARGET)-gcc $(DESTDIR)$(OUTPUT)/bin/$(TARGET)-cc
+	mkdir -p $(DESTDIR)$(OUTPUT)/lib/bfd-plugins
+	cp -L $(DESTDIR)$(OUTPUT)/libexec/gcc/$(TARGET)/$(shell cat src_gcc/gcc/BASE-VER)/liblto_plugin.so $(DESTDIR)$(OUTPUT)/lib/bfd-plugins
 
 ifneq ($(LINUX_SRCDIR),)
 TARGET_ARCH = $(firstword $(subst -, ,$(TARGET)))
