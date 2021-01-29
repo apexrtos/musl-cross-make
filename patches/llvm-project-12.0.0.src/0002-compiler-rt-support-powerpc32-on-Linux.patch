@@ -1,0 +1,28 @@
+From a1b3753c7ea62bea2283cecd60df56e5e8a03e89 Mon Sep 17 00:00:00 2001
+From: Patrick Oppenlander <patrick.oppenlander@gmail.com>
+Date: Thu, 18 Mar 2021 11:47:27 +1100
+Subject: [PATCH 2/5] [compiler-rt] support powerpc32 on Linux
+
+Differential Revision: https://reviews.llvm.org/D98831
+---
+ compiler-rt/cmake/base-config-ix.cmake | 4 +---
+ 1 file changed, 1 insertion(+), 3 deletions(-)
+
+diff --git a/compiler-rt/cmake/base-config-ix.cmake b/compiler-rt/cmake/base-config-ix.cmake
+index 1edab43e7c0d..5c0c8a2f36a7 100644
+--- a/compiler-rt/cmake/base-config-ix.cmake
++++ b/compiler-rt/cmake/base-config-ix.cmake
+@@ -182,9 +182,7 @@ macro(test_targets)
+     elseif("${COMPILER_RT_DEFAULT_TARGET_ARCH}" MATCHES "powerpc64le")
+       test_target_arch(powerpc64le "" "-m64")
+     elseif("${COMPILER_RT_DEFAULT_TARGET_ARCH}" MATCHES "powerpc")
+-      if(CMAKE_SYSTEM_NAME MATCHES "AIX")
+-        test_target_arch(powerpc "" "-m32")
+-      endif()
++      test_target_arch(powerpc "" "-m32")
+       test_target_arch(powerpc64 "" "-m64")
+     elseif("${COMPILER_RT_DEFAULT_TARGET_ARCH}" MATCHES "s390x")
+       test_target_arch(s390x "" "")
+-- 
+2.31.1
+

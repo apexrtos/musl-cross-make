@@ -1,0 +1,73 @@
+From 18b0eaf1f64f40c41f8f36e9b636b3671ccb79bd Mon Sep 17 00:00:00 2001
+From: Patrick Oppenlander <patrick.oppenlander@gmail.com>
+Date: Wed, 27 Jan 2021 12:21:29 +1100
+Subject: [PATCH] [llvm-objcopy] -O binary: consider SHT_NOBITS sections to be empty
+
+This is consistent with BFD objcopy.
+
+Previously llvm objcopy would allocate space for SHT_NOBITS sections
+often resulting in enormous binary files.
+
+New test case (binary-paddr.test %t6).
+
+Differential Revision: https://reviews.llvm.org/D95569
+---
+ .../tools/llvm-objcopy/ELF/binary-paddr.test  | 31 +++++++++++++++++++
+ llvm/tools/llvm-objcopy/ELF/Object.cpp        |  2 +-
+ 2 files changed, 32 insertions(+), 1 deletion(-)
+
+diff --git a/llvm/test/tools/llvm-objcopy/ELF/binary-paddr.test b/llvm/test/tools/llvm-objcopy/ELF/binary-paddr.test
+index f7974a60ffd6..3cece3d56f80 100644
+--- a/llvm/test/tools/llvm-objcopy/ELF/binary-paddr.test
++++ b/llvm/test/tools/llvm-objcopy/ELF/binary-paddr.test
+@@ -184,3 +184,34 @@ Sections:
+   - Name:         .data
+     Type:         SHT_PROGBITS
+     Flags:        [ SHF_ALLOC, SHF_WRITE ]
++
++## NOBITS sections should not appear in output.
++# RUN: yaml2obj --docnum=6 %s -o %t6
++# RUN: llvm-objcopy -O binary %t6 %t6.out
++# RUN: od -A x -t x2 %t6.out | FileCheck %s --check-prefix=SKIPNOBITS
++
++# SKIPNOBITS:      000000 c3c3 c3c3
++# SKIPNOBITS-NEXT: 000004
++
++--- !ELF
++FileHeader:
++  Class:   ELFCLASS64
++  Data:    ELFDATA2LSB
++  Type:    ET_EXEC
++  Machine: EM_X86_64
++Sections:
++  - Name:         .bss
++    Type:         SHT_NOBITS
++    Flags:        [ SHF_ALLOC ]
++    Address:      0x1000
++    AddressAlign: 0x1000
++    Size:         0x123
++  - Name:         gap
++    Type:         Fill
++    Size:         0xffd
++  - Name:         .text
++    Type:         SHT_PROGBITS
++    Flags:        [ SHF_ALLOC, SHF_EXECINSTR ]
++    Address:      0x10000000
++    AddressAlign: 0x1000
++    Content:      "c3c3c3c3"
+diff --git a/llvm/tools/llvm-objcopy/ELF/Object.cpp b/llvm/tools/llvm-objcopy/ELF/Object.cpp
+index e15fb24f4c42..cda90c569c09 100644
+--- a/llvm/tools/llvm-objcopy/ELF/Object.cpp
++++ b/llvm/tools/llvm-objcopy/ELF/Object.cpp
+@@ -2262,7 +2262,7 @@ Error BinaryWriter::finalize() {
+     if (Sec.ParentSegment != nullptr)
+       Sec.Addr =
+           Sec.Offset - Sec.ParentSegment->Offset + Sec.ParentSegment->PAddr;
+-    if (Sec.Size > 0)
++    if (Sec.Type != SHT_NOBITS && Sec.Size > 0)
+       MinAddr = std::min(MinAddr, Sec.Addr);
+   }
+ 
+-- 
+2.30.0
+
