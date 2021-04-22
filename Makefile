@@ -33,10 +33,10 @@ REL_TOP = ../..$(if $(TARGET),/..)
 
 MUSL_VER ?= 1.2.2
 LINUX_VER ?= headers-4.19.88-1
+CONFIG_SUB_REV ?= 3d5db9ebe860
 
 ifeq ($(COMPILER),gcc)
 
-CONFIG_SUB_REV ?= 3d5db9ebe860
 BINUTILS_VER ?= 2.33.1
 GCC_VER ?= 9.4.0
 GMP_VER ?= 6.1.2
