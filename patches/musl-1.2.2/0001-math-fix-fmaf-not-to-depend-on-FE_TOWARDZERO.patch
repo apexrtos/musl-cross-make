@@ -1,0 +1,44 @@
+From c5ec6b02c2480ba7d005749d66e5738f7bfa22bc Mon Sep 17 00:00:00 2001
+From: Szabolcs Nagy <nsz@port70.net>
+Date: Mon, 5 Jul 2021 22:37:22 +0000
+Subject: [PATCH] math: fix fmaf not to depend on FE_TOWARDZERO
+
+---
+ src/math/fmaf.c | 21 ++++++++++-----------
+ 1 file changed, 10 insertions(+), 11 deletions(-)
+
+diff --git a/src/math/fmaf.c b/src/math/fmaf.c
+index 80f5cd8a..7c65acf1 100644
+--- a/src/math/fmaf.c
++++ b/src/math/fmaf.c
+@@ -77,17 +77,16 @@ float fmaf(float x, float y, float z)
+ 	 * If result is inexact, and exactly halfway between two float values,
+ 	 * we need to adjust the low-order bit in the direction of the error.
+ 	 */
+-#ifdef FE_TOWARDZERO
+-	fesetround(FE_TOWARDZERO);
+-#endif
+-	volatile double vxy = xy;  /* XXX work around gcc CSE bug */
+-	double adjusted_result = vxy + z;
+-	fesetround(FE_TONEAREST);
+-	if (result == adjusted_result) {
+-		u.f = adjusted_result;
++	double err;
++	int neg = u.i >> 63;
++	if (neg == (z > xy))
++		err = xy - result + z;
++	else
++		err = z - result + xy;
++	if (neg == (err < 0))
+ 		u.i++;
+-		adjusted_result = u.f;
+-	}
+-	z = adjusted_result;
++	else
++		u.i--;
++	z = u.f;
+ 	return z;
+ }
+-- 
+2.31.1
+

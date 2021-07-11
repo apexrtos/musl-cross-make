@@ -1,0 +1,189 @@
+diff --git a/arch/powerpc/bits/fenv.h b/arch/powerpc/bits/fenv.h
+index c5a3e5c5..5b15c69a 100644
+--- a/arch/powerpc/bits/fenv.h
++++ b/arch/powerpc/bits/fenv.h
+@@ -1,4 +1,4 @@
+-#ifdef _SOFT_FLOAT
++#if defined(_SOFT_FLOAT) || defined(__NO_FPRS__)
+ #define FE_ALL_EXCEPT 0
+ #define FE_TONEAREST  0
+ #else
+diff --git a/arch/powerpc/reloc.h b/arch/powerpc/reloc.h
+index 527b6b7c..fdfbf827 100644
+--- a/arch/powerpc/reloc.h
++++ b/arch/powerpc/reloc.h
+@@ -1,4 +1,4 @@
+-#ifdef _SOFT_FLOAT
++#if defined(_SOFT_FLOAT) || defined(__NO_FPRS__)
+ #define FP_SUFFIX "-sf"
+ #else
+ #define FP_SUFFIX ""
+diff --git a/configure b/configure
+index a5231a0e..e1aefed7 100755
+--- a/configure
++++ b/configure
+@@ -671,9 +671,7 @@ trycppif __mips_soft_float "$t" && SUBARCH=${SUBARCH}-sf
+ fi
+ 
+ if test "$ARCH" = "powerpc" ; then
+-trycppif "__NO_FPRS__ && !_SOFT_FLOAT" "$t" && fail \
+-  "$0: error: compiler's floating point configuration is unsupported"
+-trycppif _SOFT_FLOAT "$t" && SUBARCH=${SUBARCH}-sf
++trycppif "_SOFT_FLOAT || __NO_FPRS__" "$t" && SUBARCH=${SUBARCH}-sf
+ printf "checking whether compiler can use 'd' constraint in asm... "
+ echo 'double f(double x) { __asm__ ("fabs %0, %1" : "=d"(x) : "d"(x)); return x; }' > "$tmpc"
+ if $CC $CFLAGS_C99FSE $CPPFLAGS $CFLAGS -c -o /dev/null "$tmpc" >/dev/null 2>&1 ; then
+diff --git a/src/fenv/powerpc/fenv-sf.c b/src/fenv/powerpc/fenv-sf.c
+index 85bef40f..d4248f26 100644
+--- a/src/fenv/powerpc/fenv-sf.c
++++ b/src/fenv/powerpc/fenv-sf.c
+@@ -1,3 +1,3 @@
+-#ifdef _SOFT_FLOAT
++#if defined(_SOFT_FLOAT) || defined(__NO_FPRS__)
+ #include "../fenv.c"
+ #endif
+diff --git a/src/fenv/powerpc/fenv.S b/src/fenv/powerpc/fenv.S
+index 22cea216..55055d0b 100644
+--- a/src/fenv/powerpc/fenv.S
++++ b/src/fenv/powerpc/fenv.S
+@@ -1,4 +1,4 @@
+-#ifndef _SOFT_FLOAT
++#if !defined(_SOFT_FLOAT) && !defined(__NO_FPRS__)
+ .global feclearexcept
+ .type feclearexcept,@function
+ feclearexcept:
+diff --git a/src/math/powerpc/fabs.c b/src/math/powerpc/fabs.c
+index 0efc21ef..9453a3aa 100644
+--- a/src/math/powerpc/fabs.c
++++ b/src/math/powerpc/fabs.c
+@@ -1,6 +1,6 @@
+ #include <math.h>
+ 
+-#if defined(_SOFT_FLOAT) || defined(BROKEN_PPC_D_ASM)
++#if defined(_SOFT_FLOAT) || defined(__NO_FPRS__) || defined(BROKEN_PPC_D_ASM)
+ 
+ #include "../fabs.c"
+ 
+diff --git a/src/math/powerpc/fabsf.c b/src/math/powerpc/fabsf.c
+index d88b5911..2e9da588 100644
+--- a/src/math/powerpc/fabsf.c
++++ b/src/math/powerpc/fabsf.c
+@@ -1,6 +1,6 @@
+ #include <math.h>
+ 
+-#ifdef _SOFT_FLOAT
++#if defined(_SOFT_FLOAT) || defined(__NO_FPRS__)
+ 
+ #include "../fabsf.c"
+ 
+diff --git a/src/math/powerpc/fma.c b/src/math/powerpc/fma.c
+index 135c9903..0eb2ba1e 100644
+--- a/src/math/powerpc/fma.c
++++ b/src/math/powerpc/fma.c
+@@ -1,6 +1,6 @@
+ #include <math.h>
+ 
+-#if defined(_SOFT_FLOAT) || defined(BROKEN_PPC_D_ASM)
++#if defined(_SOFT_FLOAT) || defined(__NO_FPRS__) || defined(BROKEN_PPC_D_ASM)
+ 
+ #include "../fma.c"
+ 
+diff --git a/src/math/powerpc/fmaf.c b/src/math/powerpc/fmaf.c
+index a99a2a3b..dc1a749d 100644
+--- a/src/math/powerpc/fmaf.c
++++ b/src/math/powerpc/fmaf.c
+@@ -1,6 +1,6 @@
+ #include <math.h>
+ 
+-#ifdef _SOFT_FLOAT
++#if defined(_SOFT_FLOAT) || defined(__NO_FPRS__)
+ 
+ #include "../fmaf.c"
+ 
+diff --git a/src/setjmp/powerpc/longjmp.S b/src/setjmp/powerpc/longjmp.S
+index e598bd05..90a18f1c 100644
+--- a/src/setjmp/powerpc/longjmp.S
++++ b/src/setjmp/powerpc/longjmp.S
+@@ -37,7 +37,38 @@ longjmp:
+ 	lwz 29, 72(3)
+ 	lwz 30, 76(3)
+ 	lwz 31, 80(3)
+-#ifndef _SOFT_FLOAT
++#if defined(_SOFT_FLOAT) || defined(__NO_FPRS__)
++	.machine "603"
++	mflr 0
++	bl 1f
++	.hidden __hwcap
++	.long __hwcap-.
++1:	mflr 4
++	lwz 5, 0(4)
++	add 4, 4, 5
++	andis. 4, 4, 0x80
++	beq 1f
++	evldd 14,88(3)
++	evldd 15,96(3)
++	evldd 16,104(3)
++	evldd 17,112(3)
++	evldd 18,120(3)
++	evldd 19,128(3)
++	evldd 20,136(3)
++	evldd 21,144(3)
++	evldd 22,152(3)
++	evldd 23,160(3)
++	evldd 24,168(3)
++	evldd 25,176(3)
++	evldd 26,184(3)
++	evldd 27,192(3)
++	evldd 28,200(3)
++	evldd 29,208(3)
++	evldd 30,216(3)
++	evldd 31,224(3)
++	evldd 13,232(3)
++1:	mtlr 0
++#else
+ 	lfd 14,88(3)
+ 	lfd 15,96(3)
+ 	lfd 16,104(3)
+diff --git a/src/setjmp/powerpc/setjmp.S b/src/setjmp/powerpc/setjmp.S
+index cd91a207..69d9c0ad 100644
+--- a/src/setjmp/powerpc/setjmp.S
++++ b/src/setjmp/powerpc/setjmp.S
+@@ -37,7 +37,37 @@ setjmp:
+ 	stw 29, 72(3)
+ 	stw 30, 76(3)
+ 	stw 31, 80(3)
+-#ifndef _SOFT_FLOAT
++#if defined(_SOFT_FLOAT) || defined(__NO_FPRS__)
++	mflr 0
++	bl 1f
++	.hidden __hwcap
++	.long __hwcap-.
++1:	mflr 4
++	lwz 5, 0(4)
++	add 4, 4, 5
++	andis. 4, 4, 0x80
++	beq 1f
++	evstdd 14,88(3)
++	evstdd 15,96(3)
++	evstdd 16,104(3)
++	evstdd 17,112(3)
++	evstdd 18,120(3)
++	evstdd 19,128(3)
++	evstdd 20,136(3)
++	evstdd 21,144(3)
++	evstdd 22,152(3)
++	evstdd 23,160(3)
++	evstdd 24,168(3)
++	evstdd 25,176(3)
++	evstdd 26,184(3)
++	evstdd 27,192(3)
++	evstdd 28,200(3)
++	evstdd 29,208(3)
++	evstdd 30,216(3)
++	evstdd 31,224(3)
++	evstdd 13,232(3)
++1:	mtlr 0
++#else
+ 	stfd 14,88(3)
+ 	stfd 15,96(3)
+ 	stfd 16,104(3)
