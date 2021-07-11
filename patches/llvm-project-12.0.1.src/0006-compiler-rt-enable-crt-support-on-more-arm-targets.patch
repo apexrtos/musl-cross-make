@@ -1,0 +1,25 @@
+From 2425a718046a82e705d05400bd9204b265ca3262 Mon Sep 17 00:00:00 2001
+From: Patrick Oppenlander <patrick.oppenlander@gmail.com>
+Date: Fri, 8 Jan 2021 21:34:39 +1100
+Subject: [PATCH] compiler-rt: enable crt support on more arm targets
+
+---
+ compiler-rt/cmake/config-ix.cmake | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/compiler-rt/cmake/config-ix.cmake b/compiler-rt/cmake/config-ix.cmake
+index 2edc1dabd90d..7d8b95146e9a 100644
+--- a/compiler-rt/cmake/config-ix.cmake
++++ b/compiler-rt/cmake/config-ix.cmake
+@@ -255,7 +255,7 @@ function(is_valid_apple_platform platform is_valid_out)
+ endfunction()
+ 
+ set(ARM64 aarch64)
+-set(ARM32 arm armhf)
++set(ARM32 arm armhf armv7 armv7m armv7em)
+ set(HEXAGON hexagon)
+ set(X86 i386)
+ set(X86_64 x86_64)
+-- 
+2.30.0
+
