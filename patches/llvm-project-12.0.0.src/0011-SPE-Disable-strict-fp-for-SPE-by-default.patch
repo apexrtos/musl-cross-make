@@ -1,0 +1,45 @@
+From 5c18d1136665f74b15c0df599f56ac3e2e947fb8 Mon Sep 17 00:00:00 2001
+From: Qiu Chaofan <qiucofan@cn.ibm.com>
+Date: Fri, 28 May 2021 00:10:04 +0800
+Subject: [PATCH] [SPE] Disable strict-fp for SPE by default
+
+As discussed in PR50385, strict-fp on PowerPC SPE has not been handled
+well. This patch disables it by default for SPE.
+
+Reviewed By: nemanjai, vit9696, jhibbits
+
+Differential Revision: https://reviews.llvm.org/D103235
+---
+ clang/lib/Basic/Targets/PPC.cpp                 | 1 +
+ clang/test/CodeGen/builtins-ppc-fpconstrained.c | 3 +++
+ 2 files changed, 4 insertions(+)
+
+diff --git a/clang/lib/Basic/Targets/PPC.cpp b/clang/lib/Basic/Targets/PPC.cpp
+index cc1693429220..5de66aa19438 100644
+--- a/clang/lib/Basic/Targets/PPC.cpp
++++ b/clang/lib/Basic/Targets/PPC.cpp
+@@ -59,6 +59,7 @@ bool PPCTargetInfo::handleTargetFeatures(std::vector<std::string> &Features,
+     } else if (Feature == "+prefix-instrs") {
+       HasPrefixInstrs = true;
+     } else if (Feature == "+spe" || Feature == "+efpu2") {
++      HasStrictFP = false;
+       HasSPE = true;
+       LongDoubleWidth = LongDoubleAlign = 64;
+       LongDoubleFormat = &llvm::APFloat::IEEEdouble();
+diff --git a/clang/test/CodeGen/builtins-ppc-fpconstrained.c b/clang/test/CodeGen/builtins-ppc-fpconstrained.c
+index 880c0c339ef3..909210996064 100644
+--- a/clang/test/CodeGen/builtins-ppc-fpconstrained.c
++++ b/clang/test/CodeGen/builtins-ppc-fpconstrained.c
+@@ -11,6 +11,9 @@
+ // RUN: -fallow-half-arguments-and-returns -S -ffp-exception-behavior=strict \
+ // RUN: -o - %s | FileCheck --check-prefix=CHECK-ASM \
+ // RUN: --check-prefix=FIXME-CHECK  %s
++// RUN: %clang_cc1 -triple powerpcspe -S -ffp-exception-behavior=strict \
++// RUN: -target-feature +spe -fexperimental-strict-floating-point -emit-llvm \
++// RUN: %s -o - | FileCheck --check-prefix=CHECK-CONSTRAINED %s
+ 
+ typedef __attribute__((vector_size(4 * sizeof(float)))) float vec_float;
+ typedef __attribute__((vector_size(2 * sizeof(double)))) double vec_double;
+-- 
+2.32.0
+
