@@ -1,0 +1,30 @@
+From 586317cd25fb3c32f86a16361f47e260c7c58f31 Mon Sep 17 00:00:00 2001
+From: Patrick Oppenlander <patrick.oppenlander@gmail.com>
+Date: Tue, 13 Jul 2021 10:42:55 +1000
+Subject: [PATCH] [Driver] fix PowerPC SPE musl dynamic linker name
+
+Musl treats PowerPC SPE as a soft-float target (as the PowerPC SPE ABI
+is soft-float compatible).
+
+Differential Revision: https://reviews.llvm.org/D105869
+---
+ clang/lib/Driver/ToolChains/Linux.cpp | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/clang/lib/Driver/ToolChains/Linux.cpp b/clang/lib/Driver/ToolChains/Linux.cpp
+index 886e0b35ece8..416db46ab2fe 100644
+--- a/clang/lib/Driver/ToolChains/Linux.cpp
++++ b/clang/lib/Driver/ToolChains/Linux.cpp
+@@ -410,6 +410,9 @@ std::string Linux::getDynamicLinker(const ArgList &Args) const {
+         (Triple.getEnvironment() == llvm::Triple::MuslEABIHF ||
+          tools::arm::getARMFloatABI(*this, Args) == tools::arm::FloatABI::Hard))
+       ArchName += "hf";
++    if (Arch == llvm::Triple::ppc &&
++        Triple.getSubArch() == llvm::Triple::PPCSubArch_spe)
++      ArchName = "powerpc-sf";
+ 
+     return "/lib/ld-musl-" + ArchName + ".so.1";
+   }
+-- 
+2.32.0
+
