@@ -39,12 +39,16 @@ ifneq ($(findstring s390x,$(TARGET)),)
 GCC_CONFIG_FOR_TARGET += --with-long-double-128
 endif
 
+# riscv doesn't support the --with-float option.
+# Make sure that config.mak specifies the correct ABI (--with-abi gcc option).
+ifeq ($(filter riscv%,$(TARGET)),)
 ifneq ($(filter %sf,$(TARGET)),)
 GCC_CONFIG_FOR_TARGET += --with-float=soft
 endif
 
 ifneq ($(filter %hf,$(TARGET)),)
 GCC_CONFIG_FOR_TARGET += --with-float=hard
+endif
 endif
 
 ifneq ($(LIBTOOL),)
