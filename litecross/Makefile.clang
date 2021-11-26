@@ -5,7 +5,7 @@ LLVM_SRCDIR = LLVM_SRCDIR_not_set
 MUSL_SRCDIR = MUSL_SRCDIR_not_set
 
 TARGETS = \
-	aarch64-linux-musleabi \
+	aarch64-linux-musl \
 	armv7-linux-musleabihf \
 	armv7m-linux-musleabi \
 	armv7em-linux-musleabihf \
