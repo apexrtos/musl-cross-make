@@ -1,0 +1,224 @@
+From cffd6805f1a870aca89c6de3f508e22ae063aacd Mon Sep 17 00:00:00 2001
+From: Patrick Oppenlander <patrick.oppenlander@gmail.com>
+Date: Thu, 21 Jan 2021 17:06:47 +1100
+Subject: [PATCH 1/5] [ELF] Improve compatibility with ld.bfd linker scripts
+
+Previously sections in a linker script had to be sorted by segment and address
+otherwise lld would fail with perplexing errors such as "section .foo file
+range overlaps with .bar" or "unable to place section .foo at file offset
+[...]; check your linker script for overflows".
+
+This patch improves compatibility with ld.bfd by supporting two new cases:
+
+1. Sections with decreasing addresses in the same program header, e.g:
+
+.text 0x2000 : {*(.text*)} :ph1
+.bar 0x1000 : {*(.bar*)} :ph1
+
+2. Interleaving sections across program headers, e.g:
+
+.text 0x2000 : {*(.text*)} :ph1
+.foo 0x0 : {*(.foo*)} :ph2
+.bar 0x1000 : {*(.bar*)} :ph1
+
+While it is possible in both cases to modify the linker script we would need to
+correctly detect these cases and emit more helpful diagnostics for them.
+However, as lld claims it is a "drop-in replacement for the GNU linkers that
+accepts the same command line arguments and linker scripts as GNU" it makes
+sense to improve compatibility instead.
+
+Supporting these cases requires sorting sections within a segment by address
+then placing the output in load segment order.
+
+A new out-of-order-sections test is also introduced.
+
+Differential Revision: https://reviews.llvm.org/D95199
+---
+ lld/ELF/LinkerScript.cpp                      |  6 ++-
+ lld/ELF/Writer.cpp                            | 45 ++++++++++++++++---
+ lld/ELF/Writer.h                              |  2 +
+ .../linkerscript/implicit-program-header.test |  2 +-
+ .../ELF/linkerscript/out-of-order-sections.s  | 31 +++++++++++++
+ .../linkerscript/sections-va-overflow.test    |  2 +-
+ 6 files changed, 78 insertions(+), 10 deletions(-)
+ create mode 100644 lld/test/ELF/linkerscript/out-of-order-sections.s
+
+diff --git a/lld/ELF/LinkerScript.cpp b/lld/ELF/LinkerScript.cpp
+index 201f1e48f1fb..6ec974798230 100644
+--- a/lld/ELF/LinkerScript.cpp
++++ b/lld/ELF/LinkerScript.cpp
+@@ -1179,7 +1179,11 @@ void LinkerScript::allocateHeaders(std::vector<PhdrEntry *> &phdrs) {
+ 
+   Out::elfHeader->ptLoad = nullptr;
+   Out::programHeaders->ptLoad = nullptr;
+-  firstPTLoad->firstSec = findFirstSection(firstPTLoad);
++  llvm::erase_if(firstPTLoad->sections, [](const OutputSection *s) {
++    return s == Out::elfHeader || s == Out::programHeaders;
++  });
++  firstPTLoad->firstSec =
++      firstPTLoad->sections.empty() ? nullptr : firstPTLoad->sections.front();
+ 
+   llvm::erase_if(phdrs,
+                  [](const PhdrEntry *e) { return e->p_type == PT_PHDR; });
+diff --git a/lld/ELF/Writer.cpp b/lld/ELF/Writer.cpp
+index f0d4e6e4e685..7154a2e1147d 100644
+--- a/lld/ELF/Writer.cpp
++++ b/lld/ELF/Writer.cpp
+@@ -1078,6 +1078,17 @@ void PhdrEntry::add(OutputSection *sec) {
+   p_align = std::max(p_align, sec->alignment);
+   if (p_type == PT_LOAD)
+     sec->ptLoad = this;
++  sections.push_back(sec);
++}
++
++void PhdrEntry::finalize() {
++  if (sections.empty())
++    return;
++  llvm::stable_sort(sections, [](OutputSection *l, OutputSection *r) {
++    return l->addr < r->addr;
++  });
++  firstSec = sections.front();
++  lastSec = sections.back();
+ }
+ 
+ // The beginning and the ending of .rel[a].plt section are marked
+@@ -2211,6 +2222,12 @@ template <class ELFT> void Writer<ELFT>::finalizeSections() {
+   // of finalizing other sections.
+   for (OutputSection *sec : outputSections)
+     sec->finalize();
++
++  // Sort segment sections by address. For one segment, we layout sections in
++  // the order of addresses.
++  for (Partition &part : partitions)
++    for (PhdrEntry *p : part.phdrs)
++      p->finalize();
+ }
+ 
+ // Ensure data sections are not mixed with executable sections when
+@@ -2631,11 +2648,7 @@ template <class ELFT> void Writer<ELFT>::assignFileOffsets() {
+       if (p->p_type == PT_LOAD && (p->p_flags & PF_X))
+         lastRX = p;
+ 
+-  // Layout SHF_ALLOC sections before non-SHF_ALLOC sections. A non-SHF_ALLOC
+-  // will not occupy file offsets contained by a PT_LOAD.
+-  for (OutputSection *sec : outputSections) {
+-    if (!(sec->flags & SHF_ALLOC))
+-      continue;
++  auto placeSection = [&](OutputSection *sec) {
+     off = setFileOffset(sec, off);
+ 
+     // If this is a last section of the last executable segment and that
+@@ -2644,9 +2657,27 @@ template <class ELFT> void Writer<ELFT>::assignFileOffsets() {
+     if (config->zSeparate != SeparateSegmentKind::None && lastRX &&
+         lastRX->lastSec == sec)
+       off = alignTo(off, config->commonPageSize);
+-  }
++  };
++
++  // If a linker script is in use sections can be at arbitrary addresses and
++  // can be interleaved across segments. We handle this by placing output
++  // sections in load segment order. The sections in the segment are already
++  // sorted by address.
++  if (script->hasPhdrsCommands())
++    for (Partition &part : partitions)
++      for (PhdrEntry *p : part.phdrs)
++        for (OutputSection *sec : p->sections)
++          if (sec != Out::elfHeader && !sec->offset)
++            placeSection(sec);
++
++  // Layout SHF_ALLOC sections before non-SHF_ALLOC sections. A non-SHF_ALLOC
++  // will not occupy file offsets contained by a PT_LOAD.
++  // Skip sections which are already assigned an offsets.
++  for (OutputSection *sec : outputSections)
++    if ((sec->flags & SHF_ALLOC) && !sec->offset)
++      placeSection(sec);
+   for (OutputSection *sec : outputSections)
+-    if (!(sec->flags & SHF_ALLOC))
++    if (!sec->offset)
+       off = setFileOffset(sec, off);
+ 
+   sectionHeaderOff = alignTo(off, config->wordsize);
+diff --git a/lld/ELF/Writer.h b/lld/ELF/Writer.h
+index 3698544d977b..df074287d4a2 100644
+--- a/lld/ELF/Writer.h
++++ b/lld/ELF/Writer.h
+@@ -33,6 +33,7 @@ struct PhdrEntry {
+       : p_align(type == llvm::ELF::PT_LOAD ? config->maxPageSize : 0),
+         p_type(type), p_flags(flags) {}
+   void add(OutputSection *sec);
++  void finalize();
+ 
+   uint64_t p_paddr = 0;
+   uint64_t p_vaddr = 0;
+@@ -43,6 +44,7 @@ struct PhdrEntry {
+   uint32_t p_type = 0;
+   uint32_t p_flags = 0;
+ 
++  std::vector<OutputSection *> sections;
+   OutputSection *firstSec = nullptr;
+   OutputSection *lastSec = nullptr;
+   bool hasLMA = false;
+diff --git a/lld/test/ELF/linkerscript/implicit-program-header.test b/lld/test/ELF/linkerscript/implicit-program-header.test
+index d42e52532269..5b680b4f1ebc 100644
+--- a/lld/test/ELF/linkerscript/implicit-program-header.test
++++ b/lld/test/ELF/linkerscript/implicit-program-header.test
+@@ -7,7 +7,7 @@
+ # RUN: llvm-readelf -l %t1 | FileCheck %s
+ 
+ # CHECK:      Segment Sections...
+-# CHECK-NEXT:   00     .dynsym .hash .dynstr .foo .text .dynamic
++# CHECK-NEXT:   00     .dynsym .hash .dynstr .text .dynamic
+ # CHECK-NEXT:   01     .foo
+ # CHECK-NEXT:   02     .foo
+ 
+diff --git a/lld/test/ELF/linkerscript/out-of-order-sections.s b/lld/test/ELF/linkerscript/out-of-order-sections.s
+new file mode 100644
+index 000000000000..b71d8d39275a
+--- /dev/null
++++ b/lld/test/ELF/linkerscript/out-of-order-sections.s
+@@ -0,0 +1,31 @@
++# REQUIRES: x86
++# RUN: split-file %s %t
++# RUN: llvm-mc -filetype=obj -triple=x86_64-unknown-linux %t/test.s -o %t.o
++# RUN: ld.lld -o %t1 --script %t/test.lds %t.o
++# RUN: llvm-readelf -l %t1 | FileCheck %s
++
++# CHECK:      Type Offset   VirtAddr           PhysAddr           FileSiz  MemSiz   Flg Align
++# CHECK-NEXT: LOAD 0x001000 0x0000000000001000 0x0000000000001000 0x001001 0x001001 R E 0x1000
++# CHECK-NEXT: LOAD 0x003000 0x0000000000000000 0x0000000000000000 0x000001 0x000001 R   0x1000
++
++#--- test.s
++.global _start
++_start:
++ nop
++
++.section .foo, "a"
++ .byte 0
++
++.section .bar, "a"
++ .byte 0
++
++#--- test.lds
++PHDRS {
++	ph1 PT_LOAD;
++	ph2 PT_LOAD;
++}
++SECTIONS {
++	.text 0x2000 : {*(.text*)} :ph1
++	.foo 0 : {*(.foo*)} :ph2
++	.bar 0x1000 : {*(.bar*)} :ph1
++}
+diff --git a/lld/test/ELF/linkerscript/sections-va-overflow.test b/lld/test/ELF/linkerscript/sections-va-overflow.test
+index 142d2e5ef2d7..1e8612f8fa55 100644
+--- a/lld/test/ELF/linkerscript/sections-va-overflow.test
++++ b/lld/test/ELF/linkerscript/sections-va-overflow.test
+@@ -18,5 +18,5 @@ SECTIONS {
+ ## with VA 0xffffffff20000000. That might be technically correct, but most probably
+ ## is a result of a broken script file and causes file offset calculation overflow.
+ ## It seems we do not have to support it, so we don't and we report an error in this case.
+-# ERR: error: unable to place section .text at file offset [0xFFFFFFFF20000000, 0xFFFFFFFF20000000]; check your linker script for overflows
++# ERR: error: output file too large: 18446744069951455872 bytes
+ # ERR-NOT: unable to place section .bss
+-- 
+2.31.1
+

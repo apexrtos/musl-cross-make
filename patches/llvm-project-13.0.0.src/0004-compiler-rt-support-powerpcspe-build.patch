@@ -1,0 +1,54 @@
+From 3b7e38986188974edbbab09a1fd1f886150e8d67 Mon Sep 17 00:00:00 2001
+From: Patrick Oppenlander <patrick.oppenlander@gmail.com>
+Date: Thu, 11 Feb 2021 11:51:13 +1100
+Subject: [PATCH 4/5] [compiler-rt] support powerpcspe build
+
+Differential Revision: https://reviews.llvm.org/D98836
+---
+ compiler-rt/cmake/builtin-config-ix.cmake | 2 +-
+ compiler-rt/cmake/config-ix.cmake         | 2 +-
+ compiler-rt/lib/builtins/CMakeLists.txt   | 2 ++
+ 3 files changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/compiler-rt/cmake/builtin-config-ix.cmake b/compiler-rt/cmake/builtin-config-ix.cmake
+index ad3b98799c5c..edaa8f5bb425 100644
+--- a/compiler-rt/cmake/builtin-config-ix.cmake
++++ b/compiler-rt/cmake/builtin-config-ix.cmake
+@@ -43,7 +43,7 @@ set(X86 i386)
+ set(X86_64 x86_64)
+ set(MIPS32 mips mipsel)
+ set(MIPS64 mips64 mips64el)
+-set(PPC32 powerpc)
++set(PPC32 powerpc powerpcspe)
+ set(PPC64 powerpc64 powerpc64le)
+ set(RISCV32 riscv32)
+ set(RISCV64 riscv64)
+diff --git a/compiler-rt/cmake/config-ix.cmake b/compiler-rt/cmake/config-ix.cmake
+index 9807fcd871c1..a1517fbdc77d 100644
+--- a/compiler-rt/cmake/config-ix.cmake
++++ b/compiler-rt/cmake/config-ix.cmake
+@@ -278,7 +278,7 @@ set(X86 i386)
+ set(X86_64 x86_64)
+ set(MIPS32 mips mipsel)
+ set(MIPS64 mips64 mips64el)
+-set(PPC32 powerpc)
++set(PPC32 powerpc powerpcspe)
+ set(PPC64 powerpc64 powerpc64le)
+ set(RISCV32 riscv32)
+ set(RISCV64 riscv64)
+diff --git a/compiler-rt/lib/builtins/CMakeLists.txt b/compiler-rt/lib/builtins/CMakeLists.txt
+index c81c535c8538..e2d8b00d2aef 100644
+--- a/compiler-rt/lib/builtins/CMakeLists.txt
++++ b/compiler-rt/lib/builtins/CMakeLists.txt
+@@ -603,6 +603,8 @@ set(mips64el_SOURCES ${GENERIC_TF_SOURCES}
+ 
+ set(powerpc_SOURCES ${GENERIC_SOURCES})
+ 
++set(powerpcspe_SOURCES ${GENERIC_SOURCES})
++
+ set(powerpc64_SOURCES
+   ppc/divtc3.c
+   ppc/fixtfdi.c
+-- 
+2.31.1
+

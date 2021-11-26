@@ -1,0 +1,90 @@
+From 9c0890608e51755f5c187ad3acab7af5fe421773 Mon Sep 17 00:00:00 2001
+From: Patrick Oppenlander <patrick.oppenlander@gmail.com>
+Date: Thu, 21 Jan 2021 17:07:16 +1100
+Subject: [PATCH 5/5] [ELF] Fix program header alloc when first PT_LOAD is not
+ at lowest VMA
+
+Previously lld attempted to allocate program headers before the lowest
+VMA in the program image.
+
+This patch changes the behaviour to allocate program headers in their
+associated load segment. This will only happen if specified in a linker
+script.
+
+The new offset-headers.s test case previously failed with:
+
+ld.lld: error: could not allocate headers
+
+This improves compatibility with ld.bfd scripts.
+
+Differential Revision: https://reviews.llvm.org/D95198
+---
+ lld/ELF/LinkerScript.cpp                   | 13 ++++++---
+ lld/test/ELF/linkerscript/offset-headers.s | 31 ++++++++++++++++++++++
+ 2 files changed, 41 insertions(+), 3 deletions(-)
+ create mode 100644 lld/test/ELF/linkerscript/offset-headers.s
+
+diff --git a/lld/ELF/LinkerScript.cpp b/lld/ELF/LinkerScript.cpp
+index 6ec974798230..7d47f74fc6f8 100644
+--- a/lld/ELF/LinkerScript.cpp
++++ b/lld/ELF/LinkerScript.cpp
+@@ -1149,9 +1149,16 @@ static uint64_t computeBase(uint64_t min, bool allocateHeaders) {
+ // and we'll also remove the PT_PHDR segment.
+ void LinkerScript::allocateHeaders(std::vector<PhdrEntry *> &phdrs) {
+   uint64_t min = std::numeric_limits<uint64_t>::max();
+-  for (OutputSection *sec : outputSections)
+-    if (sec->flags & SHF_ALLOC)
+-      min = std::min<uint64_t>(min, sec->addr);
++  auto hdrs = {Out::elfHeader, Out::programHeaders};
++  for (OutputSection *hdr : hdrs)
++    if (hdr->ptLoad)
++      for (OutputSection *sec : hdr->ptLoad->sections)
++        if (llvm::find(hdrs, sec) == hdrs.end())
++          min = std::min(min, sec->addr);
++  if (min == std::numeric_limits<uint64_t>::max())
++    for (OutputSection *sec : outputSections)
++      if (sec->flags & SHF_ALLOC)
++        min = std::min<uint64_t>(min, sec->addr);
+ 
+   auto it = llvm::find_if(
+       phdrs, [](const PhdrEntry *e) { return e->p_type == PT_LOAD; });
+diff --git a/lld/test/ELF/linkerscript/offset-headers.s b/lld/test/ELF/linkerscript/offset-headers.s
+new file mode 100644
+index 000000000000..ec3d5bcd6ecb
+--- /dev/null
++++ b/lld/test/ELF/linkerscript/offset-headers.s
+@@ -0,0 +1,31 @@
++# REQUIRES: x86
++# RUN: split-file %s %t
++# RUN: llvm-mc -filetype=obj -triple=x86_64-unknown-linux %t/test.s -o %t.o
++# RUN: ld.lld -o %t1 --script %t/test.lds %t.o
++# RUN: llvm-readelf -l %t1 | FileCheck %s
++
++# CHECK:      Type Offset   VirtAddr           PhysAddr           FileSiz  MemSiz   Flg Align
++# CHECK-NEXT: LOAD 0x000000 0x0000000000001000 0x0000000000001000 0x0010b0 0x0010b0 R E 0x1000
++# CHECK-NEXT: LOAD 0x002000 0x0000000000000000 0x0000000000000000 0x001000 0x001000 RW  0x1000
++
++#--- test.s
++.global _start
++_start:
++ .rept 0x1000
++ nop
++ .endr
++
++.data
++ .rept 0x1000
++ .byte 0
++ .endr
++
++#--- test.lds
++PHDRS {
++    ph1 PT_LOAD FILEHDR PHDRS;
++    ph2 PT_LOAD;
++}
++SECTIONS {
++    .data 0 : {*(.data*)} :ph2
++    .text 0x1000 + SIZEOF_HEADERS : {*(.text*)} :ph1
++}
+-- 
+2.31.1
+

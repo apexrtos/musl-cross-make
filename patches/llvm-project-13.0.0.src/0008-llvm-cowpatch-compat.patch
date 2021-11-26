@@ -1,0 +1,36 @@
+From 6f5caedf9a84aab42915f0550f385d6af8954c37 Mon Sep 17 00:00:00 2001
+From: Patrick Oppenlander <patrick.oppenlander@gmail.com>
+Date: Wed, 27 Jan 2021 16:59:15 +1100
+Subject: [PATCH] llvm cowpatch compat
+
+cowpatch creates .xxx.orig directories which cause the build failures as the
+llvm build system globs directories without excluding dotfiles.
+
+This may be broken in more places.
+---
+ llvm/cmake/modules/AddLLVM.cmake | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/llvm/cmake/modules/AddLLVM.cmake b/llvm/cmake/modules/AddLLVM.cmake
+index 333167bfb6b0..bb4ea94fff5c 100644
+--- a/llvm/cmake/modules/AddLLVM.cmake
++++ b/llvm/cmake/modules/AddLLVM.cmake
+@@ -1358,6 +1358,7 @@ endfunction()
+ 
+ function(create_subdirectory_options project type)
+   file(GLOB sub-dirs "${CMAKE_CURRENT_SOURCE_DIR}/*")
++  list(FILTER sub-dirs EXCLUDE REGEX "^\..*\.orig$")
+   foreach(dir ${sub-dirs})
+     if(IS_DIRECTORY "${dir}" AND EXISTS "${dir}/CMakeLists.txt")
+       canonicalize_tool_name(${dir} name)
+@@ -1375,6 +1376,7 @@ endfunction(create_llvm_tool_options)
+ function(llvm_add_implicit_projects project)
+   set(list_of_implicit_subdirs "")
+   file(GLOB sub-dirs "${CMAKE_CURRENT_SOURCE_DIR}/*")
++  list(FILTER sub-dirs EXCLUDE REGEX "^\..*\.orig$")
+   foreach(dir ${sub-dirs})
+     if(IS_DIRECTORY "${dir}" AND EXISTS "${dir}/CMakeLists.txt")
+       canonicalize_tool_name(${dir} name)
+-- 
+2.30.0
+
