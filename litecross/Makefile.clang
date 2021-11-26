@@ -29,6 +29,18 @@ TOOLS = \
 
 -include config.mak
 
+#
+# llvm 13.0.0 switched to using normalized target triples for runtimes.
+#
+define normalise_target
+$(if $(findstring $(words $(subst -, ,$(1))),3),$(subst -linux-musl,-unknown-linux-musl,$(1)),$(1))
+endef
+
+define normalise_targets
+$(foreach t,$(1),$(call normalise_target,$(t)))
+endef
+
+
 # TODO: determine LLVM_TARGETS_TO_BUILD from TARGETS?
 FULL_LLVM_CONFIG = $(LLVM_CONFIG) \
 	-DCLANG_DEFAULT_CXX_STDLIB=libc++ \
@@ -38,37 +50,37 @@ FULL_LLVM_CONFIG = $(LLVM_CONFIG) \
 	-DCMAKE_BUILD_TYPE=MinSizeRel \
 	-DCMAKE_INSTALL_PREFIX=/clang \
 	-DDEFAULT_SYSROOT=../../TARGET \
-	-DLLVM_BUILTIN_TARGETS='$(subst $(subst ,, ),;,$(TARGETS))' \
+	-DLLVM_BUILTIN_TARGETS='$(subst $(subst ,, ),;,$(call normalise_targets,$(TARGETS)))' \
 	-DLLVM_DEFAULT_TARGET_TRIPLE=$(DEFAULT_TARGET) \
 	-DLLVM_DISTRIBUTION_COMPONENTS='clang;clang-resource-headers;lld;LTO;$(subst $(subst ,, ),;,$(TOOLS))' \
 	-DLLVM_ENABLE_PROJECTS='clang;lld' \
 	-DLLVM_ENABLE_RUNTIMES='compiler-rt;libcxx;libcxxabi;libunwind' \
 	-DLLVM_INSTALL_TOOLCHAIN_ONLY=ON \
-	-DLLVM_RUNTIME_TARGETS='$(subst $(subst ,, ),;,$(TARGETS))' \
+	-DLLVM_RUNTIME_TARGETS='$(subst $(subst ,, ),;,$(call normalise_targets,$(TARGETS)))' \
 	-DLLVM_TARGETS_TO_BUILD='AArch64;ARM;Mips;PowerPC;X86' \
-	$(foreach t,$(TARGETS),-DBUILTINS_$(t)_CMAKE_SYSROOT=$(CURDIR)/obj_sysroot/$(t)) \
-	$(foreach t,$(TARGETS),-DBUILTINS_$(t)_CMAKE_C_FLAGS='$(TARGET_CONFIG_$(t))') \
-	$(foreach t,$(TARGETS),-DBUILTINS_$(t)_CMAKE_ASM_FLAGS='$(TARGET_CONFIG_$(t))') \
-	$(foreach t,$(TARGETS),-DRUNTIMES_$(t)_CMAKE_CXX_FLAGS='$(TARGET_CONFIG_$(t)) -L$(CURDIR)/obj_musl/$(t)/lib -B$(CURDIR)/obj_musl/$(t)/lib -Qunused-arguments') \
-	$(foreach t,$(TARGETS),-DRUNTIMES_$(t)_CMAKE_C_FLAGS='$(TARGET_CONFIG_$(t)) -L$(CURDIR)/obj_musl/$(t)/lib -B$(CURDIR)/obj_musl/$(t)/lib -Qunused-arguments') \
-	$(foreach t,$(TARGETS),-DRUNTIMES_$(t)_CMAKE_SYSROOT=$(CURDIR)/obj_sysroot/$(t)) \
-	$(foreach t,$(TARGETS),-DRUNTIMES_$(t)_COMPILER_RT_BUILD_LIBFUZZER=OFF) \
-	$(foreach t,$(TARGETS),-DRUNTIMES_$(t)_COMPILER_RT_BUILD_MEMPROF=OFF) \
-	$(foreach t,$(TARGETS),-DRUNTIMES_$(t)_COMPILER_RT_BUILD_PROFILE=OFF) \
-	$(foreach t,$(TARGETS),-DRUNTIMES_$(t)_COMPILER_RT_BUILD_SANITIZERS=OFF) \
-	$(foreach t,$(TARGETS),-DRUNTIMES_$(t)_COMPILER_RT_BUILD_XRAY=OFF) \
-	$(foreach t,$(TARGETS),-DRUNTIMES_$(t)_LIBCXXABI_ENABLE_SHARED=OFF) \
-	$(foreach t,$(TARGETS),-DRUNTIMES_$(t)_LIBCXXABI_ENABLE_STATIC_UNWINDER=ON) \
-	$(foreach t,$(TARGETS),-DRUNTIMES_$(t)_LIBCXXABI_INSTALL_LIBRARY=OFF) \
-	$(foreach t,$(TARGETS),-DRUNTIMES_$(t)_LIBCXXABI_USE_COMPILER_RT=ON) \
-	$(foreach t,$(TARGETS),-DRUNTIMES_$(t)_LIBCXXABI_USE_LLVM_UNWINDER=ON) \
-	$(foreach t,$(TARGETS),-DRUNTIMES_$(t)_LIBCXXABI_STATICALLY_LINK_UNWINDER_IN_SHARED_LIBRARY=ON) \
-	$(foreach t,$(TARGETS),-DRUNTIMES_$(t)_LIBCXX_ENABLE_STATIC_ABI_LIBRARY=ON) \
-	$(foreach t,$(TARGETS),-DRUNTIMES_$(t)_LIBCXX_HAS_MUSL_LIBC=ON) \
-	$(foreach t,$(TARGETS),-DRUNTIMES_$(t)_LIBCXX_USE_COMPILER_RT=ON) \
-	$(foreach t,$(TARGETS),-DRUNTIMES_$(t)_LIBUNWIND_ENABLE_SHARED=OFF) \
-	$(foreach t,$(TARGETS),-DRUNTIMES_$(t)_LIBUNWIND_INSTALL_LIBRARY=OFF) \
-	$(foreach t,$(TARGETS),-DRUNTIMES_$(t)_LIBUNWIND_USE_COMPILER_RT=ON) \
+	$(foreach t,$(TARGETS),-DBUILTINS_$(call normalise_target,$(t))_CMAKE_SYSROOT=$(CURDIR)/obj_sysroot/$(t)) \
+	$(foreach t,$(TARGETS),-DBUILTINS_$(call normalise_target,$(t))_CMAKE_C_FLAGS='$(TARGET_CONFIG_$(t))') \
+	$(foreach t,$(TARGETS),-DBUILTINS_$(call normalise_target,$(t))_CMAKE_ASM_FLAGS='$(TARGET_CONFIG_$(t))') \
+	$(foreach t,$(TARGETS),-DRUNTIMES_$(call normalise_target,$(t))_CMAKE_CXX_FLAGS='$(TARGET_CONFIG_$(t)) -L$(CURDIR)/obj_musl/$(t)/lib -B$(CURDIR)/obj_musl/$(t)/lib -Qunused-arguments') \
+	$(foreach t,$(TARGETS),-DRUNTIMES_$(call normalise_target,$(t))_CMAKE_C_FLAGS='$(TARGET_CONFIG_$(t)) -L$(CURDIR)/obj_musl/$(t)/lib -B$(CURDIR)/obj_musl/$(t)/lib -Qunused-arguments') \
+	$(foreach t,$(TARGETS),-DRUNTIMES_$(call normalise_target,$(t))_CMAKE_SYSROOT=$(CURDIR)/obj_sysroot/$(t)) \
+	$(foreach t,$(TARGETS),-DRUNTIMES_$(call normalise_target,$(t))_COMPILER_RT_BUILD_LIBFUZZER=OFF) \
+	$(foreach t,$(TARGETS),-DRUNTIMES_$(call normalise_target,$(t))_COMPILER_RT_BUILD_MEMPROF=OFF) \
+	$(foreach t,$(TARGETS),-DRUNTIMES_$(call normalise_target,$(t))_COMPILER_RT_BUILD_PROFILE=OFF) \
+	$(foreach t,$(TARGETS),-DRUNTIMES_$(call normalise_target,$(t))_COMPILER_RT_BUILD_SANITIZERS=OFF) \
+	$(foreach t,$(TARGETS),-DRUNTIMES_$(call normalise_target,$(t))_COMPILER_RT_BUILD_XRAY=OFF) \
+	$(foreach t,$(TARGETS),-DRUNTIMES_$(call normalise_target,$(t))_LIBCXXABI_ENABLE_SHARED=OFF) \
+	$(foreach t,$(TARGETS),-DRUNTIMES_$(call normalise_target,$(t))_LIBCXXABI_ENABLE_STATIC_UNWINDER=ON) \
+	$(foreach t,$(TARGETS),-DRUNTIMES_$(call normalise_target,$(t))_LIBCXXABI_INSTALL_LIBRARY=OFF) \
+	$(foreach t,$(TARGETS),-DRUNTIMES_$(call normalise_target,$(t))_LIBCXXABI_USE_COMPILER_RT=ON) \
+	$(foreach t,$(TARGETS),-DRUNTIMES_$(call normalise_target,$(t))_LIBCXXABI_USE_LLVM_UNWINDER=ON) \
+	$(foreach t,$(TARGETS),-DRUNTIMES_$(call normalise_target,$(t))_LIBCXXABI_STATICALLY_LINK_UNWINDER_IN_SHARED_LIBRARY=ON) \
+	$(foreach t,$(TARGETS),-DRUNTIMES_$(call normalise_target,$(t))_LIBCXX_ENABLE_STATIC_ABI_LIBRARY=ON) \
+	$(foreach t,$(TARGETS),-DRUNTIMES_$(call normalise_target,$(t))_LIBCXX_HAS_MUSL_LIBC=ON) \
+	$(foreach t,$(TARGETS),-DRUNTIMES_$(call normalise_target,$(t))_LIBCXX_USE_COMPILER_RT=ON) \
+	$(foreach t,$(TARGETS),-DRUNTIMES_$(call normalise_target,$(t))_LIBUNWIND_ENABLE_SHARED=OFF) \
+	$(foreach t,$(TARGETS),-DRUNTIMES_$(call normalise_target,$(t))_LIBUNWIND_INSTALL_LIBRARY=OFF) \
+	$(foreach t,$(TARGETS),-DRUNTIMES_$(call normalise_target,$(t))_LIBUNWIND_USE_COMPILER_RT=ON) \
 	# end
 
 all: llvm musl
@@ -109,7 +121,7 @@ obj_musl/%/.lc_configured: | obj_musl/%/ src_musl obj_llvm/.lc_built_1
 		--prefix= \
 		--target=$* \
 		--disable-wrapper \
-		LIBCC=../../obj_llvm/lib/clang/$(LLVM_VER)/lib/$*/libclang_rt.builtins.a \
+		LIBCC=../../obj_llvm/lib/clang/$(LLVM_VER)/lib/$(call normalise_target,$*)/libclang_rt.builtins.a \
 		CC="../../obj_llvm/bin/clang --target=$* $(TARGET_CONFIG_$*)" \
 		$(MUSL_CONFIG) $(MUSL_CONFIG_$*)
 	touch $@
