@@ -1,0 +1,28 @@
+From 1e258061f1c024f36f223d5500809a6047e80bc9 Mon Sep 17 00:00:00 2001
+From: Patrick Oppenlander <patrick.oppenlander@gmail.com>
+Date: Thu, 9 Dec 2021 14:13:38 +1100
+Subject: [PATCH] add riscv32 asm for vfork
+
+---
+ src/process/riscv32/vfork.s | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+ create mode 100644 src/process/riscv32/vfork.s
+
+diff --git a/src/process/riscv32/vfork.s b/src/process/riscv32/vfork.s
+new file mode 100644
+index 00000000..96f986d3
+--- /dev/null
++++ b/src/process/riscv32/vfork.s
+@@ -0,0 +1,9 @@
++.global vfork
++.type vfork,%function
++vfork:
++	li a0, (0x100 | 0x4000 | 17) # CLONE_VM | CLONE_VFORK | SIGCHLD
++	li a1, 0
++	li a7, 220 # SYS_clone
++	ecall
++	.hidden __syscall_ret
++	tail __syscall_ret
+-- 
+2.34.1
+
