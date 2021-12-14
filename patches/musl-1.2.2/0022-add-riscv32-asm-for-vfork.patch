@@ -1,7 +1,7 @@
-From 1e258061f1c024f36f223d5500809a6047e80bc9 Mon Sep 17 00:00:00 2001
+From 62b83815f5fe1a83db9a26c5a286506f182c8644 Mon Sep 17 00:00:00 2001
 From: Patrick Oppenlander <patrick.oppenlander@gmail.com>
 Date: Thu, 9 Dec 2021 14:13:38 +1100
-Subject: [PATCH] add riscv32 asm for vfork
+Subject: [PATCH 22/22] add riscv32 asm for vfork
 
 ---
  src/process/riscv32/vfork.s | 9 +++++++++
